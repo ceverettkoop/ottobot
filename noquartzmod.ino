@@ -2,7 +2,7 @@
 // Author: Matio Klingemann http://incubator.quasimondo.com
 
 // Credits:
-// This is combination of code found in this tutorial: 
+// This is combination of code found in this tutorial:
 // http://playground.arduino.cc/Main/AY38910
 // (which is based on this http://kalshagar.wikispaces.com/Arduino+and+a+YMZ294)
 // and code for generating a 2 MHz clock signal found here:
@@ -15,16 +15,35 @@ const int latchPin = 6;
 //Pin connected to clock pin (SH_CP) of 74HC595
 const int clockPin = 7;
 
-const int pinBC1 =  13;     
+const int pinBC1 =  13;
 const int pinBCDIR =  12;
 
 // 2mz clock pin
 const int freqOutputPin = 11;   // OC2A output pin for ATmega328 boards
 
 const int prescale  = 1;
-const int ocr2aval  = 3; 
+const int ocr2aval  = 3;
 const float period    = 2.0 * prescale * (ocr2aval+1) / (F_CPU/1.0e6);
 const float freq      = 1.0e6 / period;
+
+//modes
+const int mode[7][12]{
+  {0,2,4,5,7,9,11,12,14,16,17,19}, //major
+  {0,2,3,5,7,9,10,12,14,15,17,19}, //dorian
+  {0,1,3,5,7,8,10,12,13,15,17,19}, //phyrgian
+  {0,2,4,6,7,9,11,12,14,16,18,19}, //lydian
+  {0,2,4,5,7,9,10,12,14,16,17,19}, //mixolydian
+  {0,2,3,5,7,8,10,12,14,15,17,19}, //aeolian/minor
+  {0,1,3,5,6,8,10,12,13,15,17,18}, //locrian
+};
+
+int note;
+int base = 50;
+int interval = 0;
+int prog = 0;
+int limit;
+int modeselect = 0;
+boolean ascend = 1;
 
 int tp[] = {//MIDI note number
   15289, 14431, 13621, 12856, 12135, 11454, 10811, 10204,//0-o7
@@ -46,82 +65,109 @@ int tp[] = {//MIDI note number
   0//off
 };
 
-//chord shapes
-int maj[] = {4,7};
-int minor[] = {3,7};
-int note;
-
+//keyboard
+// int keys[] = {97,115,100};
 
 void setup()
 {
    //init pins
     pinMode(latchPin, OUTPUT);
-    pinMode(dataPin, OUTPUT);  
+    pinMode(dataPin, OUTPUT);
     pinMode(clockPin, OUTPUT);
     pinMode(pinBC1, OUTPUT);
-    pinMode(pinBCDIR, OUTPUT);        
+    pinMode(pinBCDIR, OUTPUT);
     pinMode(freqOutputPin, OUTPUT);
 
-   //reset pin?
-  pinMode(2,OUTPUT);
-  digitalWrite(2,HIGH);
-  digitalWrite(2,LOW);
-  delayMicroseconds(5); // more than 500us required.
-  digitalWrite(2,HIGH);
-   
+  //reset pin
+    pinMode(2,OUTPUT);
+    digitalWrite(2,HIGH);
+    digitalWrite(2,LOW);
+    delayMicroseconds(5); // more than 500us required.
+    digitalWrite(2,HIGH);
+
     init2MhzClock();
-    
-    set_mix( true, true, false, false, false, true );
-    set_chA_amplitude(8,false);
-    set_chB_amplitude(8,false);
-    set_chC_amplitude(0,true);
+
+    set_mix( true, true, true, false, false, false );
+    set_chA_amplitude(4,false);
+    set_chB_amplitude(4,false);
+    set_chC_amplitude(4,false);
+
+    Serial.begin(9600);
 }
 
 
 void loop() {
-  set_envelope(true,true,true,true,500);
+
+    limit = ( 1 + ( analogRead(0) / 70));
 
 
-    note = (random(50));   
-    note_chB(note);
- //   note_chB( note + maj[0]);
- //   note_chC( note + maj[1]);
+    note = base + mode[modeselect][prog];
 
-  
-/*  if ( random(0,6) == 0 )
-  {
-    set_chB_amplitude(8,false);
-    note_chB(random(50,66));
-  } else if ( random(0,4) == 0 )
-  {
-     set_chB_amplitude(0,false);
-  }
-  
- 
-  if ( random(0,2) == 0 )
-  {
-    set_chC_amplitude(0,true);
-    noise( random(0,0x20) );
-  } else  
-  {
-   set_chC_amplitude(0,false);
-  }
+    set_envelope(true,true,true,false,analogRead(0));
 
-*/
- 
-  delay(10000);
-  set_chB_amplitude(0,false);
-  return;
-  
+    set_chA_amplitude(6,false);
+    note_chA(note+mode[modeselect+1][interval]);
+    modecheck();
+    set_chA_amplitude(0,false);
+
+    set_chB_amplitude(6,false);
+    note_chB(note+mode[modeselect+1][interval+1]);
+    modecheck();
+    set_chB_amplitude(0,false);
+
+    set_chC_amplitude(6,false);
+    note_chC(note+mode[modeselect+1][interval+2]);
+    modecheck();
+    set_chC_amplitude(0,false);
+
+    if(interval==0){
+      ascend = 1;
+      prog++;
+    }
+
+   if(interval > limit){
+     ascend = 0;
+     prog++;
+   }
+
+   if (ascend){
+      interval++;
+   }
+
+   else{
+     interval--;
+   }
+
+  if(prog > 7){
+    prog = 0;
+   }
+
 }
 
-
+boolean modecheck() {
+  boolean change = 0;
+  for (int n=0; n < 50; n++){
+    if (!change){
+      if(digitalRead(3)){
+        modeselect++;
+        Serial.println("modeswitched");
+        delay(10);
+        if (modeselect == 6){
+          modeselect = 0;
+        }
+      }
+      change = 1;
+      delay(150);
+    }
+  }
+    return;
+  }
 
 void  init2MhzClock()
 {
     // Set Timer 2 CTC mode with no prescaling.  OC2A toggles on compare match
     //
-    // WGM22:0 = 010: CTC Mode, toggle OC 
+    // WGM22:0 = 010: CTC Mode, toggle OC
     // WGM2 bits 1 and 0 are in TCCR2A,
     // WGM2 bit 2 is in TCCR2B
     // COM2A0 sets OC2A (arduino pin 11 on Uno or Duemilanove) to toggle on compare match
@@ -142,13 +188,13 @@ void  init2MhzClock()
 
 void set_mix( boolean chA_tone,boolean chB_tone,boolean chC_tone,boolean chA_noise,boolean chB_noise,boolean chC_noise )
 {
-   write_data(7, B11000000 | 
+   write_data(7, B11000000 |
                    (chC_noise == true ? 0 : B00100000)|
-                    (chB_noise == true? 0 : B00010000) | 
-                    (chA_noise == true ? 0 : B00001000) | 
+                    (chB_noise == true? 0 : B00010000) |
+                    (chA_noise == true ? 0 : B00001000) |
                     (chC_tone == true ? 0 : B00000100) |
-                    (chB_tone == true ? 0 : B00000010) | 
-                    (chA_tone == true ? 0 : B00000001) 
+                    (chB_tone == true ? 0 : B00000010) |
+                    (chA_tone == true ? 0 : B00000001)
    );
 }
 
@@ -170,20 +216,20 @@ void set_chC_amplitude(int amplitude, boolean useEnvelope )
 void set_envelope( boolean hold, boolean alternate, boolean attack, boolean cont, unsigned long frequency )
 {
     write_data(13, (hold == true ? 0 : 1)|
-                    (alternate == true? 0 : 2) | 
-                    (attack == true ? 0 : 4) | 
-                    (cont == true ? 0 : 8) 
+                    (alternate == true? 0 : 2) |
+                    (attack == true ? 0 : 4) |
+                    (cont == true ? 0 : 8)
                 );
-                
+
     write_data(11,frequency & 0xff );
     write_data(12,(frequency >> 8)& 0xff );
-    
+
 }
 
 void note_chA(int i)
 {
   write_data(0x00, tp[i]&0xff);
-  write_data(0x01, (tp[i] >> 8)&0x0f);    
+  write_data(0x01, (tp[i] >> 8)&0x0f);
 }
 
 void note_chB(int i)
@@ -215,33 +261,50 @@ void mode_write(){
 
 void mode_inactive(){
     digitalWrite(pinBC1, LOW);
-    digitalWrite(pinBCDIR, LOW);    
+    digitalWrite(pinBCDIR, LOW);
 }
 
 void write_data(unsigned char address, unsigned char data)
-{  
-  mode_inactive();  
+{
+  mode_inactive();
   //write address
 
   digitalWrite(latchPin, LOW);
   // shift out the bits:
-  shiftOut(dataPin, clockPin, MSBFIRST, address);  
+  shiftOut(dataPin, clockPin, MSBFIRST, address);
 
   //take the latch pin high so the LEDs will light up:
   digitalWrite(latchPin, HIGH);
 
-  mode_latch();  
+  mode_latch();
   mode_inactive();
 
   //write data
-  mode_write();  
+  mode_write();
 
   digitalWrite(latchPin, LOW);
   // shift out the bits:
-  shiftOut(dataPin, clockPin, MSBFIRST, data);  
+  shiftOut(dataPin, clockPin, MSBFIRST, data);
 
   //take the latch pin high so the LEDs will light up:
   digitalWrite(latchPin, HIGH);
 
-  mode_inactive();  
+  mode_inactive();
 }
+
+/* void recvData() {
+ if (Serial.available() > 0) {
+ input = Serial.read();
+ newData = 1;
+  }
+}
+*/
+
+/* int findkey(char inKey){
+    int i;
+    for(i = 0; i < 3; i++){
+        if(keys[i] == inKey) return (i+1);
+    }
+    return 0;
+}
+*/
