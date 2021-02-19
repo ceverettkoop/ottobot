@@ -26,6 +26,8 @@ const int ocr2aval  = 3;
 const float period    = 2.0 * prescale * (ocr2aval+1) / (F_CPU/1.0e6);
 const float freq      = 1.0e6 / period;
 
+#include "Keyboard.h"
+
 //modes
 const int mode[7][12]{
   {0,2,4,5,7,9,11,12,14,16,17,19}, //major
@@ -93,6 +95,7 @@ void setup()
     set_chC_amplitude(4,false);
 
     Serial.begin(9600);
+    Keyboard.begin();
 }
 
 
@@ -144,8 +147,7 @@ void loop() {
 
 }
 
-boolean modecheck() {
-  boolean change = 0;
+void modecheck() {
   for (int n=0; n < 50; n++){
     if (!change){
       if(digitalRead(3)){
@@ -156,8 +158,6 @@ boolean modecheck() {
           modeselect = 0;
         }
       }
-      change = 1;
-      delay(150);
     }
   }
     return;
