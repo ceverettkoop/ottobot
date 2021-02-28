@@ -1,10 +1,10 @@
-// No Quarz required version for controlling a AY-3-8910 sound chip with the Arduino
-// Author: Matio Klingemann http://incubator.quasimondo.com
+//Ottobot AY38910 + Arduino Tracker
+
 
 // Credits:
-// This is combination of code found in this tutorial:
+// Based on code from Matio Klingemann http://incubator.quasimondo.com
+// which was in turn based on:
 // http://playground.arduino.cc/Main/AY38910
-// (which is based on this http://kalshagar.wikispaces.com/Arduino+and+a+YMZ294)
 // and code for generating a 2 MHz clock signal found here:
 // http://forum.arduino.cc/index.php/topic,62964.0.html
 
@@ -37,15 +37,13 @@ const int mode[7][12]{
   {0,1,3,5,6,8,10,12,13,15,17,18}, //locrian
 };
 
-int tempo;
 int interval = 0;
-int prog = 0;
+int measure = 0;
 int modeselect = 0;
-int key = 0;
 int songLength = 0;
 int songWrite[7];
-int song[] = {1,2,3,4,5,6,7};
-boolean ascend = 1;
+int song[16][4];
+
 int keyWait = 0;
 int modeWait = 0;
 
@@ -69,11 +67,11 @@ int tp[] = {//MIDI note number
   0//off
 };
 
-//keyboard
+//keyboard inputs defined as ASCII 1-7
 int keys[] = {49,50,51,52,53,54,55};
 
-void setup()
-{
+void setup() {
+
    //init pins
     pinMode(latchPin, OUTPUT);
     pinMode(dataPin, OUTPUT);
@@ -96,61 +94,63 @@ void setup()
     set_chB_amplitude(4,false);
     set_chC_amplitude(4,false);
 
+//  set_envelope(true,true,true,false,500);
     Serial.begin(9600);
 
+// write default song
+    for (int i = 0, n = 0; i < 16; ){
+        song[i][n] = random(0,7);
+        n++;
+        if (n == 4){
+          n = 0;
+          i++;
+        }
+      }
 }
 
 
 void loop() {
 
-    tempo = (20* (1 + ( analogRead(0) / 70)));
+//if playing set volume on
 
-//    note = 40 + mode[modeselect][prog];
+  set_chA_amplitude(6,false);
+  set_chB_amplitude(6,false);
+  set_chC_amplitude(6,false);
 
-    set_envelope(true,true,true,false,analogRead(0));
+//play major chord in song
 
-    set_chA_amplitude(6,false);
-    set_chB_amplitude(6,false);
-    set_chC_amplitude(6,false);
-    int note = 50+mode[modeselect][song[interval]];
+    int note = 50+mode[modeselect][song[measure][interval]];
+    Serial.println(song[measure][interval]);
     note_chA(note);
     note_chB(note+4);
     note_chC(note+7);
-    modecheck();
+
+//get input status
+    modeCheck();
+
+//end
     set_chA_amplitude(0,false);
     set_chB_amplitude(0,false);
     set_chC_amplitude(0,false);
 
+    interval++;
+    measure++;
 
-
-
-
-    if(interval==6){
-      ascend = 0;
-      prog++;
+    if (interval == 5){
+      interval = 0;
     }
 
-   if(interval == 0){
-     ascend = 1;
-   }
-
-   if (ascend){
-      interval++;
-   }
-
-   else{
-     interval--;
-   }
-
-  if(prog > 7){
-    prog = 0;
-   }
+    if (measure == 16){
+      measure = 0;
+    }
 
 }
 
-void modecheck() {
 
-//tempo
+void modeCheck() {
+
+//get tempo from dial and set as loop limit
+  int tempo = (20* (1 + ( analogRead(0) / 70)));
   for (int n=0; n < tempo; n++){
 
 //check modeswitch button
@@ -162,10 +162,10 @@ void modecheck() {
           modeselect = 0;
         }
       }
-//check for keyboard input A S or D
+//check for keyboard input matching allowable keys
       if ((Serial.available() > 0) && keyWait < 1) {
         char inChar = Serial.read();
-        key = findkey(inChar);
+        int key = findkey(inChar);
 
 //if not too fast pressed and is digit 1_7 add note to song
         if (key > 0){
@@ -175,6 +175,7 @@ void modecheck() {
         }
       }
 
+/* THIS AREA FOR WRITTING SONG
         if (songLength == 7){
           for (int i = 0; i < 7; i++) {
             song[i] = songWrite[i];
@@ -186,6 +187,7 @@ void modecheck() {
               Serial.print(" ");
             }
         }
+*/
 
       delay(1);
       keyWait--;
