@@ -16,6 +16,15 @@ const int clockPin = 7;
 const int pinBC1 =  13;
 const int pinBCDIR =  12;
 
+// 2mz clock pin
+const int freqOutputPin = 11;   // OC2A output pin for ATmega328 boards
+
+const int prescale  = 1;
+const int ocr2aval  = 3;
+const float period    = 2.0 * prescale * (ocr2aval+1) / (F_CPU/1.0e6);
+const float freq      = 1.0e6 / period;
+
+
 const int tp[] = {//MIDI note number
   15289, 14431, 13621, 12856, 12135, 11454, 10811, 10204,//0-o7
   9631, 9091, 8581, 8099, 7645, 7215, 6810, 6428,//8-15
@@ -64,5 +73,7 @@ void mode_write();
 void mode_inactive();
 
 void write_data(unsigned char address, unsigned char data);
+
+void  init2MhzClock();
 
 #endif

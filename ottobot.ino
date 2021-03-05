@@ -1,6 +1,4 @@
 //Ottobot AY38910 + Arduino Tracker
-
-
 // Credits:
 // Based on code from Matio Klingemann http://incubator.quasimondo.com
 // which was in turn based on:
@@ -10,37 +8,18 @@
 
 #include "aycontrol.h"
 
-// 2mz clock pin
-const int freqOutputPin = 11;   // OC2A output pin for ATmega328 boards
+//keyboard inputs defined as ASCII 1-7
 
-const int prescale  = 1;
-const int ocr2aval  = 3;
-const float period    = 2.0 * prescale * (ocr2aval+1) / (F_CPU/1.0e6);
-const float freq      = 1.0e6 / period;
-
-//modes
-const int mode[7][12]{
-  {0,2,4,5,7,9,11,12,14,16,17,19}, //major
-  {0,2,3,5,7,9,10,12,14,15,17,19}, //dorian
-  {0,1,3,5,7,8,10,12,13,15,17,19}, //phyrgian
-  {0,2,4,6,7,9,11,12,14,16,18,19}, //lydian
-  {0,2,4,5,7,9,10,12,14,16,17,19}, //mixolydian
-  {0,2,3,5,7,8,10,12,14,15,17,19}, //aeolian/minor
-  {0,1,3,5,6,8,10,12,13,15,17,18}, //locrian
-};
-
-int interval = 0;
-int measure = 0;
-int modeselect = 0;
-int songLength = 0;
-int songWrite[7];
 int song[16][4];
-
+int noteIn = 0;
+int noteOut = 0;
+int measure = 0;
+int measureIn = 0;
+int modeselect = 0;
+int songWrite[4];
 int keyWait = 0;
 int modeWait = 0;
 
-//keyboard inputs defined as ASCII 1-7
-int keys[] = {49,50,51,52,53,54,55};
 
 void setup() {
 
@@ -69,7 +48,7 @@ void setup() {
 //  set_envelope(true,true,true,false,500);
     Serial.begin(9600);
 
-// write default song
+// write default song 16 measures
     for (int i = 0, n = 0; i < 16; ){
         song[i][n] = random(0,7);
         n++;
@@ -80,8 +59,17 @@ void setup() {
       }
 }
 
-
 void loop() {
+
+  const int mode[7][12]{
+    {0,2,4,5,7,9,11,12,14,16,17,19}, //major
+    {0,2,3,5,7,9,10,12,14,15,17,19}, //dorian
+    {0,1,3,5,7,8,10,12,13,15,17,18}, //phyrgian
+    {0,2,4,6,7,9,11,12,14,16,18,19}, //lydian
+    {0,2,4,5,7,9,10,12,14,16,17,19}, //mixolydian
+    {0,2,3,5,7,8,10,12,14,15,17,19}, //aeolian/minor
+    {0,1,3,5,6,8,10,12,13,15,17,18}, //locrian
+  };
 
 //if playing set volume on
 
@@ -91,31 +79,33 @@ void loop() {
 
 //play major chord in song
 
-    int note = 50+mode[modeselect][song[measure][interval]];
-    Serial.println(song[measure][interval]);
-    note_chA(note);
-    note_chB(note+4);
-    note_chC(note+7);
+    int pitch = 50+mode[modeselect][song[measure][noteOut]];
+    Serial.println(song[measure][noteOut]);
+    note_chA(pitch);
+    note_chB(pitch+4);
+    note_chC(pitch+7);
 
 //get input status
     modeCheck();
+
+//display note currently able to be written
+
 
 //end
     set_chA_amplitude(0,false);
     set_chB_amplitude(0,false);
     set_chC_amplitude(0,false);
 
-    interval++;
+    noteOut++;
     measure++;
 
-    if (interval == 5){
-      interval = 0;
+    if (noteOut == 5){
+      noteOut = 0;
     }
 
-    if (measure == 16){
+    if (measure == 17){
       measure = 0;
     }
-
 }
 
 
@@ -130,36 +120,40 @@ void modeCheck() {
         modeselect++;
         Serial.println("modeswitched");
         modeWait = 200;
-        if (modeselect == 6){
+        if (modeselect == 7){
           modeselect = 0;
         }
       }
 //check for keyboard input matching allowable keys
       if ((Serial.available() > 0) && keyWait < 1) {
         char inChar = Serial.read();
-        int key = findkey(inChar);
-
+        int key = findKey(inChar);
 //if not too fast pressed and is digit 1_7 add note to song
-        if (key > 0){
-          songWrite[songLength] = key;
-          songLength++;
+        if (key){
+          songWrite[noteIn] = (key - 1);
+          noteIn++;
           keyWait = 200;
         }
       }
-
-/* THIS AREA FOR WRITTING SONG
-        if (songLength == 7){
-          for (int i = 0; i < 7; i++) {
-            song[i] = songWrite[i];
+//when four notes have been written write measure
+        if (noteIn == 4){
+          for (int i = 0; i < 4; i++) {
+            song[measureIn][i] = songWrite[i];
           }
-          songLength = 0;
-          Serial.println("Song written: ");
-            for (int i = 0; i < 7; i++) {
-              Serial.print(song[i]);
-              Serial.print(" ");
+          noteIn = 0;
+
+          Serial.println("Measure written: ");
+
+          for (int i = 0; i < 4; i++) {
+            Serial.print(song[measureIn][i]);
+            Serial.print(" ");
             }
+
+          measureIn++;
+          if (measureIn == 16){
+            measureIn = 0;
+          }
         }
-*/
 
       delay(1);
       keyWait--;
@@ -167,34 +161,11 @@ void modeCheck() {
   }
 }
 
-void  init2MhzClock()
-{
-    // Set Timer 2 CTC mode with no prescaling.  OC2A toggles on compare match
-    //
-    // WGM22:0 = 010: CTC Mode, toggle OC
-    // WGM2 bits 1 and 0 are in TCCR2A,
-    // WGM2 bit 2 is in TCCR2B
-    // COM2A0 sets OC2A (arduino pin 11 on Uno or Duemilanove) to toggle on compare match
-    //
-    TCCR2A = ((1 << WGM21) | (1 << COM2A0));
 
-    // Set Timer 2  No prescaling  (i.e. prescale division = 1)
-    //
-    // CS22:0 = 001: Use CPU clock with no prescaling
-    // CS2 bits 2:0 are all in TCCR2B
-    TCCR2B = (1 << CS20);
-
-    // Make sure Compare-match register A interrupt for timer2 is disabled
-    TIMSK2 = 0;
-    // This value determines the output frequency
-    OCR2A = ocr2aval;
-}
-
-
- int findkey(char inKey){
-    int i;
-    for(i = 0; i < 7; i++){
-        if(keys[i] == inKey) return (i+1);
-    }
-    return 0;
+int findKey(char inKey){
+  int keys[] = {49,50,51,52,53,54,55};
+  for(int i = 0; i < 7; i++){
+      if(keys[i] == inKey) return (i+1);
   }
+  return 0;
+}
