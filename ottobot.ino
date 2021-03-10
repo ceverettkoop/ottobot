@@ -18,8 +18,8 @@ int measureIn = 0;
 int modeselect = 0;
 int songWrite[4];
 int keyWait = 0;
-int modeWait = 0;
-
+int volumeToggle = 0;
+int volume = 0;
 
 void setup() {
 
@@ -41,9 +41,6 @@ void setup() {
     init2MhzClock();
 
     set_mix( true, true, true, false, false, false );
-    set_chA_amplitude(4,false);
-    set_chB_amplitude(4,false);
-    set_chC_amplitude(4,false);
 
 //  set_envelope(true,true,true,false,500);
     Serial.begin(9600);
@@ -71,11 +68,22 @@ void loop() {
     {0,1,3,5,6,8,10,12,13,15,17,18}, //locrian
   };
 
-//if playing set volume on
+//if playing set volume 6 else 0
 
-  set_chA_amplitude(6,false);
-  set_chB_amplitude(6,false);
-  set_chC_amplitude(6,false);
+  if (volumeToggle){
+      if (volume == 0){
+        volume = 6;
+      }
+        else{
+          volume = 0;
+        }
+
+      set_chA_amplitude(volume,false);
+      set_chB_amplitude(volume,false);
+      set_chC_amplitude(volume,false);
+
+      volumeToggle = 0;
+  }
 
 //play major chord in song
 
@@ -87,9 +95,6 @@ void loop() {
 
 //get input status
     modeCheck();
-
-//display note currently able to be written
-
 
 //end
     set_chA_amplitude(0,false);
@@ -115,15 +120,6 @@ void modeCheck() {
   int tempo = (20* (1 + ( analogRead(0) / 70)));
   for (int n=0; n < tempo; n++){
 
-//check modeswitch button
-      if(digitalRead(3) && modeWait <1){
-        modeselect++;
-        Serial.println("modeswitched");
-        modeWait = 200;
-        if (modeselect == 7){
-          modeselect = 0;
-        }
-      }
 //check for keyboard input matching allowable keys
       if ((Serial.available() > 0) && keyWait < 1) {
         char inChar = Serial.read();
@@ -157,15 +153,36 @@ void modeCheck() {
 
       delay(1);
       keyWait--;
-      modeWait--;
   }
 }
 
+//search input for commands
+// ASCII 0 = start/stop playback
+// ASCII 1-7 = note
+// ASCII 8 = change MUSICAL mode
+// ASCII 9 = toggle keyboard/tracker
 
 int findKey(char inKey){
+
+// If 1-7 return interval 1-7
   int keys[] = {49,50,51,52,53,54,55};
-  for(int i = 0; i < 7; i++){
-      if(keys[i] == inKey) return (i+1);
-  }
+    for(int i = 0; i < 7; i++){
+        if(keys[i] == inKey) return (i+1);
+    }
+
+// If ASCII 0 toggle volume
+    if(inKey == 48){
+      volumeToggle = 1;
+    }
+
+// If ASCII 8 change musical mode
+      if( inKey == 56) {
+        modeselect++;
+        Serial.println("modeswitched");
+        if (modeselect == 7){
+          modeselect = 0;
+        }
+      }
+
   return 0;
 }
