@@ -20,6 +20,7 @@ int songWrite[4];
 int keyWait = 0;
 int volumeToggle = 0;
 int volume = 0;
+unsigned int tracker = 1;
 
 void setup() {
 
@@ -68,69 +69,76 @@ void loop() {
     {0,1,3,5,6,8,10,12,13,15,17,18}, //locrian
   };
 
-//if playing set volume 6 else 0
+//volume on or off
 
   if (volumeToggle){
-      if (volume == 0){
-        volume = 6;
-      }
-        else{
-          volume = 0;
-        }
-
+      changeVolume();
       set_chA_amplitude(volume,false);
       set_chB_amplitude(volume,false);
       set_chC_amplitude(volume,false);
-
-      volumeToggle = 0;
   }
 
-//play major chord in song
 
-    int pitch = 50+mode[modeselect][song[measure][noteOut]];
-    Serial.println(song[measure][noteOut]);
-    note_chA(pitch);
-    note_chB(pitch+4);
-    note_chC(pitch+7);
 
-//get input status
-    modeCheck();
+//tracker mode instructions
 
-//end
-    set_chA_amplitude(0,false);
-    set_chB_amplitude(0,false);
-    set_chC_amplitude(0,false);
+  if (tracker){
 
-    noteOut++;
-    measure++;
+  //get input status
+      trackerInput();
 
-    if (noteOut == 5){
-      noteOut = 0;
+  //play major chord in song with base note of current place in song
+
+      int pitch = 50+mode[modeselect][song[measure][noteOut]];
+      Serial.println(song[measure][noteOut]);
+      note_chA(pitch);
+      note_chB(pitch+4);
+      note_chC(pitch+7);
+
+      noteOut++;
+      measure++;
+
+      if (noteOut == 5){
+        noteOut = 0;
+      }
+
+      if (measure == 17){
+        measure = 0;
+      }
+
+      delay(200);
+  }
+
+//direct key entry mode
+  else{
+    int key = returnCommand();
+    if (key > 0 && key < 7){
+        int pitch = 50 + mode[modeselect][key];
     }
 
-    if (measure == 17){
-      measure = 0;
-    }
+
+  }
+
+
 }
 
 
-void modeCheck() {
+void trackerInput() {
 
 //get tempo from dial and set as loop limit
   int tempo = (20* (1 + ( analogRead(0) / 70)));
   for (int n=0; n < tempo; n++){
 
-//check for keyboard input matching allowable keys
-      if ((Serial.available() > 0) && keyWait < 1) {
-        char inChar = Serial.read();
-        int key = findKey(inChar);
+  int key = returnCommand();
+
 //if not too fast pressed and is digit 1_7 add note to song
-        if (key){
+        if (key && (keyWait < 1)){
           songWrite[noteIn] = (key - 1);
           noteIn++;
           keyWait = 200;
         }
       }
+
 //when four notes have been written write measure
         if (noteIn == 4){
           for (int i = 0; i < 4; i++) {
@@ -153,7 +161,15 @@ void modeCheck() {
 
       delay(1);
       keyWait--;
-  }
+}
+
+
+int returnCommand(){
+  //check for keyboard input
+        if (Serial.available() > 0) {
+          char inChar = Serial.read();
+          return findKey(inChar);
+        }
 }
 
 //search input for commands
@@ -161,6 +177,7 @@ void modeCheck() {
 // ASCII 1-7 = note
 // ASCII 8 = change MUSICAL mode
 // ASCII 9 = toggle keyboard/tracker
+
 
 int findKey(char inKey){
 
@@ -183,6 +200,17 @@ int findKey(char inKey){
           modeselect = 0;
         }
       }
-
+//no valid input return false
   return 0;
+}
+
+void changeVolume(){
+  if (volume == 0){
+    volume = 6;
+  }
+    else{
+      volume = 0;
+    }
+
+  volumeToggle = 0;
 }
